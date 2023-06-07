@@ -236,7 +236,7 @@ begin
       when "0010011" => controls <= "1000100010"; -- I-type ALU
       when "1101111" => controls <= "1011001000"; -- jal
       -- when "0010011" => controls <= "1000100010"; -- slli
-      when "0010111" => controls <= "1100-011--"; -- auipc
+      when "0010111" => controls <= "11001011--"; -- auipc
       when "1100011" => controls <= "0010000010"; -- beq and blt
       -- when "1100011" => controls <= "001000--10";
       when "1100111" => controls <= "1000101000"; -- jalr
@@ -794,7 +794,7 @@ begin
   sum <= std_logic_vector(unsigned(a) + unsigned(condinvb) + unsigned(ALUControl_0_tmp));
   shifter : barrel generic map(width => 32) port map(a, b(4 downto 0), shift);
 
-  process(a,b,ALUControl,sum) begin
+  process(a,b,ALUControl,sum, shift) begin
     case Alucontrol is
       when "000" =>  ALUResult_s <= sum;
       when "001" =>  ALUResult_s <= sum;
