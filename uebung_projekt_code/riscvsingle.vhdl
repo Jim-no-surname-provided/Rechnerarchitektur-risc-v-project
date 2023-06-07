@@ -126,7 +126,6 @@ architecture struct of riscvsingle is
        PCSrc:          out    STD_ULOGIC_VECTOR(1 downto 0);
        ALUSrc:         out    STD_ULOGIC;
        RegWrite:       out    STD_ULOGIC;
-       Jump:           out    STD_ULOGIC;
        ImmSrc:         out    STD_ULOGIC_VECTOR(2 downto 0);
        ALUControl:     out    STD_ULOGIC_VECTOR(2 downto 0));
   end component;
@@ -145,13 +144,14 @@ architecture struct of riscvsingle is
          ReadData:             in     STD_ULOGIC_VECTOR(31 downto 0));
   end component;
     
-  signal ALUSrc, RegWrite, Jump, Zero, Negative, PCSrc: STD_ULOGIC;
-  signal ResultSrc, ImmSrc: STD_ULOGIC_VECTOR(2 downto 0);
+  signal ALUSrc, RegWrite, Jump, Zero, Negative: STD_ULOGIC;
+  signal PCSrc, ResultSrc: STD_ULOGIC_VECTOR(1 downto 0);
+  signal ImmSrc: STD_ULOGIC_VECTOR(2 downto 0);
   signal ALUControl: STD_ULOGIC_VECTOR(2 downto 0);
 begin
   c: controller port map(Instr(6 downto 0), Instr(14 downto 12),
                          Instr(30), Zero, Negative, ResultSrc, MemWrite,
-                         PCSrc, ALUSrc, RegWrite, Jump,
+                         PCSrc, ALUSrc, RegWrite,
                          ImmSrc, ALUControl);
   dp: datapath port map(clk, reset, ResultSrc, PCSrc, ALUSrc, 
                         RegWrite, ImmSrc, ALUControl, Zero, Negative,
@@ -197,17 +197,17 @@ architecture struct of controller is
  
   component branchdec
     port(op:         in STD_ULOGIC_VECTOR(6 downto 0);
-         funct3:     in  STD_ULOGIC;
+         funct3:     in  STD_ULOGIC_VECTOR(2 downto 0);
          Zero:       in  STD_ULOGIC;
          Negative:   in  STD_ULOGIC;
          PCSrc: out STD_ULOGIC_VECTOR(1 downto 0));
-  end;
+  end component;
 
   signal ALUOp:  STD_ULOGIC_VECTOR(1 downto 0);
 begin
   bd: branchdec port map(op, funct3, Zero, Negative, PCSrc);
-  md: maindec port map(op, ResultSrc, MemWrite, Branch,
-                       ALUSrc, RegWrite, Jump_s, ImmSrc, ALUOp);
+  md: maindec port map(op, ResultSrc, MemWrite,
+                       ALUSrc, RegWrite, ImmSrc, ALUOp);
   ad: aludec port map(op(5), funct3, funct7b5, ALUOp, ALUControl);
   
 end;
@@ -233,14 +233,14 @@ begin
       when "0000011" => controls <= "1000100100"; -- lw
       when "0100011" => controls <= "0001110000"; -- sw
       when "0110011" => controls <= "10--000010"; -- R-type
-      when "1100011" => controls <= "0010000001"; -- beq
       when "0010011" => controls <= "1000100010"; -- I-type ALU
       when "1101111" => controls <= "1011001000"; -- jal
-      when "0010011" => controls <= "1000100010"; -- slli
+      -- when "0010011" => controls <= "1000100010"; -- slli
       when "0010111" => controls <= "1100-011--"; -- auipc
-      when "1100011" => controls <= "001000--10"; -- blt
+      when "1100011" => controls <= "0010000010"; -- beq and blt
+      -- when "1100011" => controls <= "001000--10";
       when "1100111" => controls <= "1000101000"; -- jalr
-      when others    => controls <= "-----------"; -- not valid
+      when others    => controls <= "----------"; -- not valid
     end case;
   end process;
 
@@ -253,26 +253,28 @@ use IEEE.STD_LOGIC_1164.all;
 
 entity branchdec is -- branch control decoder
   port(op:         in  STD_ULOGIC_VECTOR(6 downto 0);
-       funct3:     in  STD_ULOGIC;
+       funct3:     in  STD_ULOGIC_VECTOR(2 downto 0);
        Zero:       in  STD_ULOGIC;
        Negative:   in  STD_ULOGIC;
        PCSrc: out STD_ULOGIC_VECTOR(1 downto 0));
 end;
 
-architecture behave of aludec is
+architecture behave of branchdec is
 begin
-  process(opb5, Zero, Negative) begin
-    if(opb5 = "1100011") then
+  process(op, Zero, Negative) begin
+    if(op = "1100011") then
       if(funct3 = "000") then
         PCSrc <= '0' & Zero;
-      elsif(funct3 = "100")
+      elsif(funct3 = "100") then
         PCSrc <= '0' & Negative;
-    elsif(opb5 = "1101111") then
+      end if;
+    elsif(op = "1101111") then
       PCSrc <= "01";
-    elsif(opb5 = "1100111") then
+    elsif(op = "1100111") then
       PCSrc <= "10";
     else
       PCSrc <= "00";
+    end if;
   end process;
 end;
 
@@ -347,6 +349,11 @@ architecture struct of datapath is
   end component;
   component mux3 generic(width: integer);
     port(d0, d1, d2: in  STD_ULOGIC_VECTOR(width-1 downto 0);
+         s:          in  STD_ULOGIC_VECTOR(1 downto 0);
+         y:          out STD_ULOGIC_VECTOR(width-1 downto 0));
+  end component;
+  component mux4 generic(width: integer);
+    port(d0, d1, d2, d3: in  STD_ULOGIC_VECTOR(width-1 downto 0);
          s:          in  STD_ULOGIC_VECTOR(1 downto 0);
          y:          out STD_ULOGIC_VECTOR(width-1 downto 0));
   end component;
@@ -567,7 +574,7 @@ end;
 library IEEE;
 use IEEE.STD_LOGIC_1164.all;
 
-entity mux4 is -- three-input multiplexer
+entity mux4 is -- four-input multiplexer
   generic(width: integer :=8);
   port(d0, d1, d2, d3: in  STD_ULOGIC_VECTOR(width-1 downto 0);
        s:          in  STD_ULOGIC_VECTOR(1 downto 0);
@@ -785,7 +792,7 @@ begin
   condinvb <= not b when Alucontrol(0)='1' else b;
   ALUControl_0_tmp <= (0 => ALUControl(0), others => '0');
   sum <= std_logic_vector(unsigned(a) + unsigned(condinvb) + unsigned(ALUControl_0_tmp));
-  shifter : barrel generic map(width => width) port map(a, b(4 downto 0), shift);
+  shifter : barrel generic map(width => 32) port map(a, b(4 downto 0), shift);
 
   process(a,b,ALUControl,sum) begin
     case Alucontrol is
